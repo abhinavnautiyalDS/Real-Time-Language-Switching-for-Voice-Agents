@@ -84,30 +84,3 @@ Latest requested targets include Punjabi-English 5,000 rows, Marathi-English 10,
 ## Metrics
 
 Report accuracy, macro-F1, per-label precision/recall/F1, confusion matrix, class support, CPU latency p50/p90, model size, and performance on untouched real call transcripts.
-
-## Streamlit demo
-
-The repository includes `app.py`, a small interactive UI for the saved fine-tuned classifier. Enter a sentence to view the predicted language tag, top-class softmax score, and scores for all 12 classes.
-
-### Run locally
-
-From the repository root:
-
-```bash
-git lfs install
-git lfs pull origin main
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-The model is loaded from `models/multilingual-bert-tiny-final/` and inference runs on CPU.
-
-### Deploy with Streamlit Community Cloud
-
-1. Open [Streamlit Community Cloud](https://share.streamlit.io/).
-2. Select **Create app** and choose this GitHub repository.
-3. Select branch `main`, main file path `app.py`, then deploy.
-4. If deployment cannot find the weights, check that the repository's Git LFS objects are downloadable and that the model files exist in `models/multilingual-bert-tiny-final/`.
-
-The displayed confidence is a softmax score, not a guarantee of correctness or a calibrated probability. The script-count panel shows visible text cues; it is not a faithful explanation of the model's internal decision. Validate against real voice-call transcripts before production use.
-
