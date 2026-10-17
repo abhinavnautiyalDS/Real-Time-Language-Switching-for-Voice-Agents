@@ -1,0 +1,48 @@
+{
+  "text_column_candidates": [
+    "text",
+    "sentence",
+    "utterance"
+  ],
+  "category_column_candidates": [
+    "category",
+    "language_category"
+  ],
+  "seed": 42,
+  "split_ratios": {
+    "train": 0.8,
+    "validation": 0.1,
+    "test": 0.1
+  },
+  "category_targets": {
+    "english_only": 20000,
+    "hindi_only": 20000,
+    "hindi_english_mixed_script": 20000,
+    "punjabi_only": 20000,
+    "punjabi_hindi_mixed_script": 10000,
+    "punjabi_english_mixed_script": 5000,
+    "punjabi_hindi_english_mixed_script": 5000,
+    "bengali_only": 20000,
+    "bengali_english_mixed_script": 20000,
+    "gujarati_only": 20000,
+    "gujarati_english_mixed_script": 20000,
+    "kannada_only": 20000,
+    "kannada_english_mixed_script": 20000,
+    "malayalam_only": 20000,
+    "malayalam_english_mixed_script": 20000,
+    "marathi_only": 20000,
+    "marathi_english_mixed_script": 10000,
+    "marathi_hindi_mixed_script": 10000,
+    "telugu_only": 20000,
+    "telugu_english_mixed_script": 20000,
+    "assamese_only": 20000,
+    "assamese_english_mixed_script": 20000,
+    "tamil_only": 20000,
+    "tamil_english_mixed_script": 20000,
+    "unsupported_language_only": 10000,
+    "unsupported_language_english_mixed_script": 10000
+  },
+  "configured_target_total": 440000,
+  "previous_plan_headline_total": 500000,
+  "note": "Targets reflect the latest user-requested reductions. The notebook reports actual counts and never fabricates rows."
+}
