@@ -54,15 +54,24 @@ Romanized Hindi remains `hi-IN`; Romanized Punjabi remains `pa-IN`. Latin script
     └── DATASET_POLICY.md
 ```
 
+## Colab notebooks
+
+- [01 — Prepare dataset](notebooks/01_prepare_dataset.ipynb): upload the final candidate CSV, validate categories and labels, audit counts/duplicates, create group-aware splits, and optionally push raw/interim/processed data with Git LFS.
+- [02 — Fine-tune BERT-Tiny baseline](notebooks/02_finetune_bert_tiny.ipynb): load the splits, inspect tokenizer coverage, fine-tune, evaluate the test split, measure CPU latency, and optionally push the model.
+
+Open either notebook on GitHub and choose **Open in Colab**, or download it and upload it to Colab.
+
 ## Workflow
 
-1. Upload the finalized candidate CSV in Colab.
+1. Run notebook 01 and upload the finalized candidate CSV.
 2. Validate categories, labels, empty text, duplicates, label conflicts, and provenance.
 3. Preserve source metadata and create group-safe train/validation/test splits.
 4. Inspect category and label reports; resolve unexplained shortages and conflicts before training.
 5. Use train for optimization, validation for model selection, and test only for final evaluation.
 6. Keep real-call evaluation data separate from training data.
 7. Record configuration, dataset hash, random seed, metrics, and model revision.
+
+The notebook's latest category targets total 440,000 rows after the requested reductions; this differs from the earlier 500,000 headline. The audit reports actual counts instead of creating replacement rows.
 
 ## Data licensing and privacy
 
