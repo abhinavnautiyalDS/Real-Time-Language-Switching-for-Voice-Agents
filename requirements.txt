@@ -7,4 +7,3 @@ datasets>=3.0
 evaluate>=0.4
 accelerate>=1.0
 safetensors>=0.4
-streamlit>=1.40
