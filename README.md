@@ -6,7 +6,49 @@ A small language classifier for voice-agent transcripts, with a focus on Indian 
 
 I built this because identifying a transcript's language is not as simple as checking its script. A user might say *"Eligibility क्या है?"*, write Hindi in Latin characters, or switch between English and another Indian language in the same sentence. A script-based rule can get these cases wrong, so this project treats the task as **utterance-level language classification**.
 
-The goal is to predict a language tag that a voice pipeline can use downstream, while keeping inference light enough to test on a CPU.
+The goal is to predict a language tag immediately after STT so the LLM gets a signal for the current turn and can respond in the user's language without waiting for a later turn. Inference needs to stay lightweight so it does not add a noticeable pause.
+
+
+
+## Why this exists in the voice pipeline
+
+This project started with a language-switching problem in a real-time voice agent.
+
+A typical voice pipeline looks like this:
+
+```text
+User speaks
+   ↓
+STT (speech → text)
+   ↓
+LLM (understands the turn and generates a reply)
+   ↓
+TTS (text → speech)
+   ↓
+Agent speaks
+```
+
+The delay is not only the time taken by each component. The LLM also has to work out which language the user is speaking and decide how to respond. When a user switches language mid-conversation, the agent can sometimes keep using the previous language and only switch after another turn or two. That makes the conversation feel slow and unnatural.
+
+The approach here is to add a **small, fast classifier immediately after STT**. It reads the transcript, predicts a language tag, and passes that tag to the LLM alongside the transcript:
+
+```text
+User speaks
+   ↓
+STT → transcript
+   ↓
+Lightweight language classifier → language tag
+   ↓
+LLM receives: transcript + language tag
+   ↓
+TTS speaks the response
+```
+
+The tag gives the LLM an explicit, up-to-date signal about the language of the current user turn, instead of making it infer the language from conversation history alone. The aim is to help the agent switch on the **same turn**, including when the user changes language during a conversation.
+
+This classifier is a routing/context signal, not a replacement for STT, the LLM or TTS. It does add a small amount of work after transcription, so inference speed matters. The goal is to keep that overhead low enough that faster language switching does not come at the cost of a noticeable pause.
+
+The classifier can only guide the response if the voice-agent integration actually forwards its predicted tag to the LLM and the LLM prompt/runtime follows it. The model alone does not guarantee instant switching; that needs to be checked in end-to-end voice tests.
 
 ## What it predicts
 
@@ -35,7 +77,7 @@ The label follows the language policy, not just the characters used. For example
 - **Leakage-aware splits:** group-aware train, validation and test splits, with official source test groups kept in the test set when available.
 - **Custom tokenizer:** a case-preserving WordPiece tokenizer trained on the training text to improve coverage of the scripts in the dataset.
 - **Two model sizes:** fine-tuned BERT-Tiny E2 (2 layers) and E4 (4 layers), compared with the existing E2 model.
-- **Evaluation:** accuracy, macro-F1, per-class metrics and a confusion matrix, with a separate focus on CPU latency and real-call testing.
+- **Evaluation:** accuracy, macro-F1, per-class metrics and a confusion matrix, with a separate focus on CPU latency and end-to-end language-switching tests.
 - **Streamlit test app:** choose a model, enter a sentence, and inspect its predicted tag, top-class score and scores for all 12 classes.
 
 ## Try the Streamlit app locally
