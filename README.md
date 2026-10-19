@@ -1,4 +1,6 @@
 # Multilingual Voice Language Classifier
+<img width="2048" height="768" alt="Monochrome Multilingual Voice Classifier" src="https://github.com/user-attachments/assets/3e67e704-973c-4a1b-92e6-37bbcd237188" />
+
 
 A small language classifier for voice-agent transcripts, with a focus on Indian languages and code-switching.
 
