@@ -1,4 +1,4 @@
-# Multilingual Voice Language Classifier
+# Real-Time Language Switching for Voice Agents
 <img width="2048" height="768" alt="Monochrome Multilingual Voice Classifier" src="https://github.com/user-attachments/assets/3e67e704-973c-4a1b-92e6-37bbcd237188" />
 
 
