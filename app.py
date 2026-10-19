@@ -1,6 +1,7 @@
 from pathlib import Path
 import tempfile
 import zipfile
+import urllib.request
 
 import pandas as pd
 import streamlit as st
@@ -12,6 +13,14 @@ OLD_MODEL_DIR = ROOT / "models" / "multilingual-bert-tiny-final"
 ARTIFACT_DIR = ROOT / "artifacts" / "models"
 EXTRACT_ROOT = Path(tempfile.gettempdir()) / "multilingual-voice-language-classifier-models"
 MAX_LENGTH = 128
+
+# Version 4 model is stored on the separate version4 branch of this same repository.
+VERSION4_MODEL_URL = (
+    "https://raw.githubusercontent.com/abhinavnautiyalDS/"
+    "Real-Time-Language-Switching-for-Voice-Agents/version4/"
+    "models/bert_tiny_e2_multilingual_version4.zip"
+)
+VERSION4_CACHE_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4.zip"
 
 MODEL_OPTIONS = {
     "Old E2 — existing model": {
@@ -30,6 +39,13 @@ MODEL_OPTIONS = {
         "path": ARTIFACT_DIR / "bert_tiny_e4_multilingual.zip",
         "extract_name": "bert_tiny_e4_multilingual",
         "description": "4-layer BERT-Tiny; new multilingual tokenizer and fine-tuning.",
+    },
+    "Version 4 — multilingual E2": {
+        "kind": "remote_zip",
+        "path": VERSION4_CACHE_ARCHIVE,
+        "url": VERSION4_MODEL_URL,
+        "extract_name": "bert_tiny_e2_multilingual_version4",
+        "description": "Version 4 BERT-Tiny E2 model from the version4 branch.",
     },
 }
 
@@ -71,12 +87,21 @@ def inspect_script(text: str) -> dict:
 
 
 def resolve_model_dir(model_name: str) -> Path:
-    """Return the existing model directory or safely extract a selected model ZIP."""
+    """Return an existing model directory or safely download/extract a selected ZIP."""
     spec = MODEL_OPTIONS[model_name]
     if spec["kind"] == "directory":
         return Path(spec["path"])
 
     archive = Path(spec["path"])
+    if spec["kind"] == "remote_zip" and not archive.exists():
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            urllib.request.urlretrieve(spec["url"], archive)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not download the Version 4 model from {spec['url']}: {exc}"
+            ) from exc
+
     if not archive.exists():
         raise FileNotFoundError(
             f"Archive not found: {archive}. Make sure the model ZIP is present in "
@@ -99,6 +124,9 @@ def resolve_model_dir(model_name: str) -> Path:
                     raise ValueError("Unsafe path detected in model ZIP.")
             zf.extractall(target_root)
     except zipfile.BadZipFile as exc:
+        # A corrupt/partial download should be removed so the next run can retry.
+        if spec["kind"] == "remote_zip":
+            archive.unlink(missing_ok=True)
         raise RuntimeError(
             f"{archive.name} is not a readable ZIP. The repository may contain a "
             "Git LFS pointer instead of the downloaded model archive."
@@ -160,7 +188,7 @@ with st.sidebar:
         "Choose model",
         options=list(MODEL_OPTIONS.keys()),
         index=0,
-        help="Old E2 is the existing app model; New E2 and New E4 use the newly uploaded model archives.",
+        help="Compare the original E2, new E2, new E4, and Version 4 multilingual models.",
     )
     st.caption(MODEL_OPTIONS[selected_model]["description"])
     st.divider()
@@ -263,6 +291,7 @@ if st.button("Classify sentence", type="primary"):
             st.info(
                 "For the new E2/E4 options, check that the ZIP archives exist under "
                 "artifacts/models and Git LFS downloaded their actual contents. "
+                "For Version 4, check network access to the version4 branch model ZIP. "
                 "Also check requirements.txt dependencies."
             )
 
