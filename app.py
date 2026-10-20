@@ -14,13 +14,20 @@ ARTIFACT_DIR = ROOT / "artifacts" / "models"
 EXTRACT_ROOT = Path(tempfile.gettempdir()) / "multilingual-voice-language-classifier-models"
 MAX_LENGTH = 128
 
-# Version 4 model is stored on the separate version4 branch of this same repository.
+# Version 4 and Version 4.1 models are stored on their respective branches.
 VERSION4_MODEL_URL = (
-    "https://raw.githubusercontent.com/abhinavnautiyalDS/"
+    "https://media.githubusercontent.com/media/abhinavnautiyalDS/"
     "Real-Time-Language-Switching-for-Voice-Agents/version4/"
     "models/bert_tiny_e2_multilingual_version4.zip"
 )
 VERSION4_CACHE_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4.zip"
+
+VERSION41_MODEL_URL = (
+    "https://media.githubusercontent.com/media/abhinavnautiyalDS/"
+    "Real-Time-Language-Switching-for-Voice-Agents/version4.1/"
+    "models/bert_tiny_e2_multilingual_version4_1.zip"
+)
+VERSION41_CACHE_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4_1.zip"
 
 MODEL_OPTIONS = {
     "Old E2 — existing model": {
@@ -34,11 +41,12 @@ MODEL_OPTIONS = {
         "extract_name": "bert_tiny_e2_multilingual",
         "description": "2-layer BERT-Tiny; new multilingual tokenizer and fine-tuning.",
     },
-    "New E4 — multilingual fine-tune": {
-        "kind": "zip",
-        "path": ARTIFACT_DIR / "bert_tiny_e4_multilingual.zip",
-        "extract_name": "bert_tiny_e4_multilingual",
-        "description": "4-layer BERT-Tiny; new multilingual tokenizer and fine-tuning.",
+    "Version 4.1 — latest multilingual E2": {
+        "kind": "remote_zip",
+        "path": VERSION41_CACHE_ARCHIVE,
+        "url": VERSION41_MODEL_URL,
+        "extract_name": "bert_tiny_e2_multilingual_version4_1",
+        "description": "Latest Version 4.1 multilingual BERT-Tiny E2 model from the version4.1 branch.",
     },
     "Version 4 — multilingual E2": {
         "kind": "remote_zip",
