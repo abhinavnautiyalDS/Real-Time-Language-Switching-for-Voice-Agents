@@ -28,7 +28,7 @@ VERSION41_MODEL_URL = (
     "Real-Time-Language-Switching-for-Voice-Agents/version4.1/"
     "models/bert_tiny_e2_multilingual_version4_1.zip"
 )
-VERSION41_CACHE_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4_1.zip"
+VERSION41_CACHE_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4.1.zip"
 
 MODEL_OPTIONS = {
     "Old E2 — existing model": {
