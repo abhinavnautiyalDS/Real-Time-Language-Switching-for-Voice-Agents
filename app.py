@@ -26,7 +26,7 @@ VERSION4_CACHE_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual
 VERSION41_MODEL_URL = (
     "https://media.githubusercontent.com/media/abhinavnautiyalDS/"
     "Real-Time-Language-Switching-for-Voice-Agents/version4.1/"
-    "models/bert_tiny_e2_multilingual_version4_1.zip"
+    "models/bert_tiny_e2_multilingual_version4.1.zip"
 )
 VERSION41_CACHE_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4.1.zip"
 
