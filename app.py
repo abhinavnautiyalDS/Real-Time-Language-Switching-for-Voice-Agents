@@ -1,5 +1,6 @@
 from pathlib import Path
 import tempfile
+import time
 import zipfile
 import urllib.request
 
@@ -164,9 +165,12 @@ def load_classifier(model_path: str):
 
 
 def predict(text: str, tokenizer, model):
+    # Measure tokenization + forward pass; this is the per-request prediction latency.
+    prediction_start = time.perf_counter()
     inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=MAX_LENGTH)
     with torch.inference_mode():
         probabilities = torch.softmax(model(**inputs).logits[0], dim=-1)
+    prediction_latency_ms = (time.perf_counter() - prediction_start) * 1000
     id2label = model.config.id2label
     rows = []
     for idx, prob in enumerate(probabilities.tolist()):
@@ -179,7 +183,7 @@ def predict(text: str, tokenizer, model):
         })
     rows.sort(key=lambda row: row["Probability"], reverse=True)
     token_count = len(tokenizer(text, truncation=True, max_length=MAX_LENGTH)["input_ids"])
-    return rows[0], rows, token_count
+    return rows[0], rows, token_count, prediction_latency_ms
 
 
 st.set_page_config(page_title="Multilingual Voice Language Classifier", page_icon="🌐", layout="wide")
@@ -221,11 +225,16 @@ if st.button("Classify sentence", type="primary"):
         st.error("Please enter a sentence first.")
     else:
         try:
+            request_start = time.perf_counter()
+            load_start = time.perf_counter()
             with st.spinner(f"Preparing {selected_model}..."):
                 model_dir = resolve_model_dir(selected_model)
                 tokenizer, model = load_classifier(str(model_dir))
+            model_load_latency_ms = (time.perf_counter() - load_start) * 1000
+
             with st.spinner("Running model inference on CPU..."):
-                top, rows, token_count = predict(sentence, tokenizer, model)
+                top, rows, token_count, prediction_latency_ms = predict(sentence, tokenizer, model)
+            end_to_end_latency_ms = (time.perf_counter() - request_start) * 1000
 
             st.caption(f"Selected model: {selected_model} · Loaded from: {model_dir}")
             st.divider()
@@ -234,6 +243,17 @@ if st.button("Classify sentence", type="primary"):
             c1.metric("Predicted tag", top["Language tag"])
             c2.metric("Language", top["Language"])
             c3.metric("Top-class confidence", f'{top["Confidence (%)"]:.2f}%')
+
+            st.subheader("Latency")
+            l1, l2, l3 = st.columns(3)
+            l1.metric("Prediction latency", f"{prediction_latency_ms:.2f} ms")
+            l2.metric("Model load / setup", f"{model_load_latency_ms:.2f} ms")
+            l3.metric("Total request time", f"{end_to_end_latency_ms:.2f} ms")
+            st.caption(
+                "Prediction latency includes tokenization and the model forward pass. "
+                "Model load/setup includes model resolution and loading; cached models make "
+                "subsequent runs much faster. Total request time includes both stages."
+            )
 
             if top["Confidence (%)"] >= 80:
                 st.success("The model assigns a high softmax score to its top class.")
@@ -289,6 +309,11 @@ if st.button("Classify sentence", type="primary"):
                     "predicted_label": top["Language tag"],
                     "predicted_language": top["Language"],
                     "top_softmax_score": top["Probability"],
+                    "latency_ms": {
+                        "prediction_tokenization_and_forward_pass": round(prediction_latency_ms, 3),
+                        "model_load_and_setup": round(model_load_latency_ms, 3),
+                        "end_to_end_request": round(end_to_end_latency_ms, 3),
+                    },
                     "class_probabilities": {
                         row["Language tag"]: row["Probability"] for row in rows
                     },
@@ -297,9 +322,9 @@ if st.button("Classify sentence", type="primary"):
             st.error("Could not load the selected model or run inference.")
             st.code(str(exc))
             st.info(
-                "For the new E2/E4 options, check that the ZIP archives exist under "
-                "artifacts/models and Git LFS downloaded their actual contents. "
-                "For Version 4, check network access to the version4 branch model ZIP. "
+                "For the new E2 option, check that its ZIP archive exists under "
+                "artifacts/models and Git LFS downloaded its actual contents. "
+                "For Version 4 and Version 4.1, check network access to the branch model ZIP. "
                 "Also check requirements.txt dependencies."
             )
 
