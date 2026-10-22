@@ -10,7 +10,7 @@ import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 ROOT = Path(__file__).resolve().parent
-OLD_MODEL_ARCHIVE = EXTRACT_ROOT / "downloads" / "old_e2_latest.zip"
+OLD_MODEL_ARCHIVE = EXTRACT_ROOT / "downloads" / "model_4_3.zip"
 ARTIFACT_DIR = ROOT / "artifacts" / "models"
 EXTRACT_ROOT = Path(tempfile.gettempdir()) / "multilingual-voice-language-classifier-models"
 MAX_LENGTH = 128
@@ -31,11 +31,11 @@ VERSION41_MODEL_URL = (
 VERSION41_CACHE_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4.1.zip"
 
 MODEL_OPTIONS = {
-    "Old E2 — latest Version 4.1 model": {
+    "4.3 — latest multilingual model": {
         "kind": "remote_zip",
         "path": OLD_MODEL_ARCHIVE,
         "url": "https://media.githubusercontent.com/media/abhinavnautiyalDS/Real-Time-Language-Switching-for-Voice-Agents/version4.1/models/bert_tiny_e2_multilingual_version4.1.zip",
-        "extract_name": "old_e2_latest",
+        "extract_name": "model_4_3",
         "description": "Latest multilingual BERT-Tiny E2 checkpoint from the version4.1 branch.",
     },
     "New E2 — multilingual fine-tune": {
@@ -202,7 +202,7 @@ with st.sidebar:
         "Choose model",
         options=list(MODEL_OPTIONS.keys()),
         index=0,
-        help="Compare the latest Version 4.1 model (replacing Old E2), new E2, Version 4.1 ZIP, and Version 4 models.",
+        help="Compare the latest 4.3 model, new E2, Version 4.1 ZIP, and Version 4 models.",
     )
     st.caption(MODEL_OPTIONS[selected_model]["description"])
     st.divider()
