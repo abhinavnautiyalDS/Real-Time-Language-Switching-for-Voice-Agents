@@ -341,9 +341,9 @@ if st.button("Run full turn-flow simulation", type="primary", key="run_turn_flow
             elif filler_hint:
                 decision = "BUFFER_AND_WAIT" if not second else "COMBINE_WITH_NEXT"
                 hard_reason = "Manual filler/noise hint is enabled; this is not automatic noise detection."
-            elif entity_hint and f1["word_count"] <= 2 and f1["R"] < threshold:
+            elif entity_hint and f1["word_count"] <= 2:
                 decision = "BUFFER_AND_WAIT" if not second else "COMBINE_WITH_NEXT"
-                hard_reason = "Possible name/company/acronym plus low reliability: buffer as a cautious heuristic."
+                hard_reason = "Manual name/company/acronym hint on a short turn: buffer as a cautious heuristic, regardless of the raw score."
             elif f1["R"] < threshold:
                 decision = "BUFFER_AND_WAIT" if not second else "COMBINE_WITH_NEXT"
                 hard_reason = f"Reliability {f1['R']:.3f} is below threshold {threshold:.2f}."
