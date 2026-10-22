@@ -2,3 +2,4 @@
 *.parquet filter=lfs diff=lfs merge=lfs -text
 *.csv filter=lfs diff=lfs merge=lfs -text
 artifacts/datasets/*.zip filter=lfs diff=lfs merge=lfs -text
+bert_tiny_e2_multilingual_version4.3.zip -filter -diff -merge text
