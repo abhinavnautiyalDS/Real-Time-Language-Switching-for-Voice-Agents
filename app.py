@@ -3,6 +3,7 @@ import tempfile
 import time
 import zipfile
 import urllib.request
+import urllib.error
 
 import pandas as pd
 import streamlit as st
@@ -30,9 +31,11 @@ VERSION41_MODEL_URL = (
 )
 VERSION41_CACHE_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4.1.zip"
 
+# The media.githubusercontent.com URL returned 404 in the deployed environment.
+# Use GitHub's standard raw download URL for the 4.3 archive instead.
 VERSION43_MODEL_URL = (
-    "https://media.githubusercontent.com/media/abhinavnautiyalDS/"
-    "Real-Time-Language-Switching-for-Voice-Agents/version4.1/"
+    "https://github.com/abhinavnautiyalDS/"
+    "Real-Time-Language-Switching-for-Voice-Agents/raw/refs/heads/version4.1/"
     "models/bert_tiny_e2_multilingual_version4.3.zip"
 )
 
@@ -103,6 +106,22 @@ def inspect_script(text: str) -> dict:
     return {name: count for name, count in counts.items() if count > 0}
 
 
+def download_archive(url: str, archive: Path, fallback_url: str | None = None) -> None:
+    """Download a model ZIP, retrying a fallback URL when configured."""
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        urllib.request.urlretrieve(url, archive)
+    except Exception as first_error:
+        archive.unlink(missing_ok=True)
+        if not fallback_url or fallback_url == url:
+            raise
+        try:
+            urllib.request.urlretrieve(fallback_url, archive)
+        except Exception:
+            archive.unlink(missing_ok=True)
+            raise first_error
+
+
 def resolve_model_dir(model_name: str) -> Path:
     """Return an existing model directory or safely download/extract a selected ZIP."""
     spec = MODEL_OPTIONS[model_name]
@@ -111,12 +130,12 @@ def resolve_model_dir(model_name: str) -> Path:
 
     archive = Path(spec["path"])
     if spec["kind"] == "remote_zip" and not archive.exists():
-        archive.parent.mkdir(parents=True, exist_ok=True)
         try:
-            urllib.request.urlretrieve(spec["url"], archive)
+            download_archive(spec["url"], archive, spec.get("fallback_url"))
         except Exception as exc:
+            attempted_url = spec["url"]
             raise RuntimeError(
-                f"Could not download the selected model from {spec['url']}: {exc}"
+                f"Could not download the selected model from {attempted_url}: {exc}"
             ) from exc
 
     if not archive.exists():
@@ -141,7 +160,6 @@ def resolve_model_dir(model_name: str) -> Path:
                     raise ValueError("Unsafe path detected in model ZIP.")
             zf.extractall(target_root)
     except zipfile.BadZipFile as exc:
-        # A corrupt/partial download should be removed so the next run can retry.
         if spec["kind"] == "remote_zip":
             archive.unlink(missing_ok=True)
         raise RuntimeError(
@@ -173,7 +191,6 @@ def load_classifier(model_path: str):
 
 
 def predict(text: str, tokenizer, model):
-    # Measure tokenization + forward pass; this is the per-request prediction latency.
     prediction_start = time.perf_counter()
     inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=MAX_LENGTH)
     with torch.inference_mode():
@@ -326,6 +343,7 @@ if st.button("Classify sentence", type="primary"):
                         row["Language tag"]: row["Probability"] for row in rows
                     },
                 })
+
         except Exception as exc:
             st.error("Could not load the selected model or run inference.")
             st.code(str(exc))
