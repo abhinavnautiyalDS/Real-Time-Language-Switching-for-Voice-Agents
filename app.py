@@ -10,7 +10,7 @@ import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 ROOT = Path(__file__).resolve().parent
-OLD_MODEL_DIR = ROOT / "models" / "multilingual-bert-tiny-final"
+OLD_MODEL_DIR = EXTRACT_ROOT / "old_e2_latest"
 ARTIFACT_DIR = ROOT / "artifacts" / "models"
 EXTRACT_ROOT = Path(tempfile.gettempdir()) / "multilingual-voice-language-classifier-models"
 MAX_LENGTH = 128
@@ -31,10 +31,13 @@ VERSION41_MODEL_URL = (
 VERSION41_CACHE_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4.1.zip"
 
 MODEL_OPTIONS = {
-    "Old E2 — existing model": {
-        "kind": "directory",
+    "Old E2 — latest Version 4.1 model": {
+        "kind": "remote_directory",
         "path": OLD_MODEL_DIR,
-        "description": "The model already used by the original Streamlit app.",
+        "repo": "abhinavnautiyalDS/multilingual-voice-language-classifier",
+        "branch": "version4.1",
+        "remote_path": "models/multilingual-bert-tiny-final",
+        "description": "Latest multilingual BERT-Tiny E2 checkpoint from the multilingual-voice-language-classifier version4.1 branch.",
     },
     "New E2 — multilingual fine-tune": {
         "kind": "zip",
@@ -100,6 +103,33 @@ def resolve_model_dir(model_name: str) -> Path:
     spec = MODEL_OPTIONS[model_name]
     if spec["kind"] == "directory":
         return Path(spec["path"])
+
+    if spec["kind"] == "remote_directory":
+        target_dir = Path(spec["path"])
+        target_dir.mkdir(parents=True, exist_ok=True)
+        required_files = ("config.json", "model.safetensors", "tokenizer.json")
+        optional_files = ("tokenizer_config.json", "special_tokens_map.json", "vocab.txt")
+        base_url = (
+            f"https://raw.githubusercontent.com/{spec['repo']}/"
+            f"{spec['branch']}/{spec['remote_path']}"
+        )
+        for filename in (*required_files, *optional_files):
+            target = target_dir / filename
+            if target.is_file() and target.stat().st_size:
+                continue
+            try:
+                urllib.request.urlretrieve(f"{base_url}/{filename}", target)
+            except Exception:
+                target.unlink(missing_ok=True)
+                if filename in required_files:
+                    raise RuntimeError(
+                        f"Could not download required Old E2 model file: {filename}. "
+                        f"Check that it exists at {base_url}/{filename}."
+                    )
+        missing = [name for name in required_files if not (target_dir / name).is_file()]
+        if missing:
+            raise FileNotFoundError(f"Missing required Old E2 files: {missing}")
+        return target_dir
 
     archive = Path(spec["path"])
     if spec["kind"] == "remote_zip" and not archive.exists():
@@ -200,7 +230,7 @@ with st.sidebar:
         "Choose model",
         options=list(MODEL_OPTIONS.keys()),
         index=0,
-        help="Compare the original E2, new E2, new E4, and Version 4 multilingual models.",
+        help="Compare the latest Version 4.1 model (replacing Old E2), new E2, Version 4.1 ZIP, and Version 4 models.",
     )
     st.caption(MODEL_OPTIONS[selected_model]["description"])
     st.divider()
