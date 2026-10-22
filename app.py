@@ -237,6 +237,194 @@ with st.sidebar:
         "Evaluate all models against held-out real call transcripts before production use."
     )
 
+# Interactive turn-buffering / reliability-flow simulator (experimental rules).
+st.divider()
+st.header("🧪 Turn Buffering Simulator — inspect every calculation")
+st.write(
+    "Type one ASR turn, optionally add a second compatible turn, and inspect the features, "
+    "reliability score, buffering decision, combined text, and actual classifier predictions."
+)
+with st.expander("Decision logic and limitations", expanded=False):
+    st.markdown(
+        """
+        - This simulates post-ASR turn handling; it does not change STT endpointing.
+        - Formula: R = (0.25L + 0.20M + 0.20C + 0.20S) / 0.85 when ASR confidence is unavailable.
+        - L: min(word_count / reference_words, 1).
+        - M: heuristic meaningful-token ratio blended with a known meaningful-phrase flag.
+        - C: top softmax score from the selected model; not necessarily calibrated.
+        - S: recognized-script coverage, a lightweight clue—not a language prediction.
+        - A reviewed meaningful acknowledgement bypasses buffering. Entity/filler flags are manual hints, not a named-entity detector.
+        - Weights and threshold are starting values only; evaluate on real call data before production use.
+        """
+    )
+
+sim_c1, sim_c2 = st.columns(2)
+with sim_c1:
+    turn1 = st.text_area("Turn 1 (required)", value="Rahul", key="buffer_turn1", height=90)
+with sim_c2:
+    turn2 = st.text_area(
+        "Turn 2 (optional; same speaker/context)",
+        value="mujhe appointment chahiye",
+        key="buffer_turn2",
+        height=90,
+        help="Leave empty to simulate waiting for a second turn or timing out.",
+    )
+
+sim_r1, sim_r2, sim_r3 = st.columns(3)
+with sim_r1:
+    ref_words = st.slider("Reference word count", min_value=2, max_value=10, value=5, key="buffer_ref_words")
+with sim_r2:
+    threshold = st.slider("Reliability threshold", min_value=0.30, max_value=0.95, value=0.65, step=0.05, key="buffer_threshold")
+with sim_r3:
+    wait_ms = st.slider("Illustrative wait window (ms)", min_value=100, max_value=1000, value=500, step=50, key="buffer_wait_ms")
+
+sim_r4, sim_r5, sim_r6 = st.columns(3)
+with sim_r4:
+    meaningful_ack = st.checkbox(
+        "Turn 1 is a known meaningful acknowledgement",
+        value=False,
+        key="buffer_ack",
+        help="Example: “हाँ, बिल्कुल”. This rule bypasses length-only buffering.",
+    )
+with sim_r5:
+    entity_hint = st.checkbox("Turn 1 may be a name/company/acronym", value=True, key="buffer_entity")
+with sim_r6:
+    filler_hint = st.checkbox("Turn 1 may be filler/noise only", value=False, key="buffer_filler")
+
+if st.button("Run full turn-flow simulation", type="primary", key="run_turn_flow"):
+    first = " ".join(turn1.split())
+    second = " ".join(turn2.split())
+    if not first:
+        st.error("Enter Turn 1 to run the simulation.")
+    else:
+        try:
+            with st.spinner(f"Loading {selected_model} for real classifier scores..."):
+                sim_model_dir = resolve_model_dir(selected_model)
+                sim_tokenizer, sim_model = load_classifier(str(sim_model_dir))
+
+            def _script_feature(value):
+                cues = inspect_script(value)
+                alpha_count = sum(ch.isalpha() for ch in value)
+                recognized_count = sum(cues.values())
+                coverage = recognized_count / max(alpha_count, 1)
+                return min(max(coverage, 0.0), 1.0), cues, alpha_count, recognized_count
+
+            def _feature_row(value):
+                tokens = value.split()
+                n = len(tokens)
+                length = min(n / ref_words, 1.0)
+                filler_set = {"umm", "um", "uh", "uhh", "hmm", "hmmm", "erm", "ahh"}
+                non_filler = [t for t in tokens if t.lower().strip(".,!?;:") not in filler_set]
+                token_ratio = len(non_filler) / max(n, 1)
+                known_phrase = 1.0 if value.lower().strip(" .,!?") in {
+                    "हाँ", "हां", "हाँ बिल्कुल", "हां बिल्कुल", "बिल्कुल",
+                    "hello", "hi", "yes", "okay", "ok", "haan", "haan bilkul",
+                } else 0.0
+                meaningful = min(max(0.5 * token_ratio + 0.5 * known_phrase, 0.0), 1.0)
+                script_score, cues, alpha_count, recognized_count = _script_feature(value)
+                top, all_rows, token_count, latency = predict(value, sim_tokenizer, sim_model)
+                confidence = top["Probability"]
+                reliability = (0.25 * length + 0.20 * meaningful + 0.20 * confidence + 0.20 * script_score) / 0.85
+                return {
+                    "text": value, "word_count": n, "L": length, "M": meaningful,
+                    "C": confidence, "S": script_score, "R": reliability,
+                    "script_cues": cues, "alpha_count": alpha_count,
+                    "recognized_count": recognized_count, "top": top, "rows": all_rows,
+                    "token_count": token_count, "latency": latency,
+                    "token_ratio": token_ratio, "known_phrase": known_phrase,
+                }
+
+            f1 = _feature_row(first)
+            if meaningful_ack:
+                decision = "CLASSIFY_NOW"
+                hard_reason = "Manual meaningful-acknowledgement override is enabled."
+            elif filler_hint:
+                decision = "BUFFER_AND_WAIT" if not second else "COMBINE_WITH_NEXT"
+                hard_reason = "Manual filler/noise hint is enabled; this is not automatic noise detection."
+            elif entity_hint and f1["word_count"] <= 2 and f1["R"] < threshold:
+                decision = "BUFFER_AND_WAIT" if not second else "COMBINE_WITH_NEXT"
+                hard_reason = "Possible name/company/acronym plus low reliability: buffer as a cautious heuristic."
+            elif f1["R"] < threshold:
+                decision = "BUFFER_AND_WAIT" if not second else "COMBINE_WITH_NEXT"
+                hard_reason = f"Reliability {f1['R']:.3f} is below threshold {threshold:.2f}."
+            else:
+                decision = "CLASSIFY_NOW"
+                hard_reason = f"Reliability {f1['R']:.3f} meets/exceeds threshold {threshold:.2f}."
+
+            st.subheader("1. Turn 1 feature calculations")
+            st.code(
+                f"Input: {first}\n"
+                f"Word count n = {f1['word_count']}\n"
+                f"L = min(n / N_ref, 1) = min({f1['word_count']} / {ref_words}, 1) = {f1['L']:.3f}\n"
+                f"Meaningful-token ratio = {f1['token_ratio']:.3f}\n"
+                f"Known-phrase match = {f1['known_phrase']:.1f}\n"
+                f"M = 0.5 × token_ratio + 0.5 × phrase_match = {f1['M']:.3f}\n"
+                f"C = actual BERT-Tiny top softmax score = {f1['C']:.3f}\n"
+                f"S = recognized-script coverage = {f1['recognized_count']} / max({f1['alpha_count']}, 1) = {f1['S']:.3f}\n"
+                f"ASR confidence = unavailable; weights renormalized by 0.85\n"
+                f"R = (0.25L + 0.20M + 0.20C + 0.20S) / 0.85 = {f1['R']:.3f}\n"
+                f"Threshold = {threshold:.2f}\n"
+                f"Decision = {decision}"
+            )
+            st.caption(hard_reason)
+            st.caption(f"Illustrative buffering window: {wait_ms} ms. This UI simulates the decision; it does not actually wait for a live ASR event.")
+            fc1, fc2, fc3, fc4 = st.columns(4)
+            fc1.metric("Length L", f"{f1['L']:.3f}")
+            fc2.metric("Meaning M", f"{f1['M']:.3f}")
+            fc3.metric("Model confidence C", f"{f1['C']*100:.2f}%")
+            fc4.metric("Reliability R", f"{f1['R']:.3f}")
+            if decision == "CLASSIFY_NOW":
+                st.success("Flow result: classify Turn 1 immediately.")
+            elif second:
+                st.warning("Flow result: combine Turn 1 + Turn 2, then classify the combined text.")
+            else:
+                st.warning("Flow result: buffer Turn 1; no second turn supplied, so timeout would flush Turn 1 alone.")
+
+            final_text = first
+            if decision == "COMBINE_WITH_NEXT" and second:
+                final_text = first + " " + second
+            st.subheader("2. Text sent to the language classifier")
+            st.code(final_text)
+            if decision == "BUFFER_AND_WAIT" and not second:
+                st.info("No Turn 2 was entered. On a real timeout, the buffered Turn 1 would be classified alone.")
+            elif decision == "CLASSIFY_NOW":
+                st.write("The simulator's selected output is Turn 1. Turn 2 is not needed for this decision.")
+            else:
+                st.write("The simulator's selected output combines the two supplied turns (same speaker/context assumed).")
+
+            st.subheader("3. Actual BERT-Tiny prediction for selected output")
+            chosen_top, chosen_rows, chosen_tokens, chosen_latency = predict(final_text, sim_tokenizer, sim_model)
+            pc1, pc2, pc3 = st.columns(3)
+            pc1.metric("Predicted language tag", chosen_top["Language tag"])
+            pc2.metric("Language", chosen_top["Language"])
+            pc3.metric("Top softmax score", f"{chosen_top['Confidence (%)']:.2f}%")
+            st.write(f"Classifier input tokens: {chosen_tokens} · Prediction latency: {chosen_latency:.2f} ms")
+            st.dataframe(pd.DataFrame([{
+                "Language tag": row["Language tag"],
+                "Language": row["Language"],
+                "Confidence (%)": row["Confidence (%)"],
+            } for row in chosen_rows]), hide_index=True, use_container_width=True)
+
+            st.subheader("4. Compare single-turn vs combined-turn predictions")
+            if second:
+                raw_top, raw_rows, raw_tokens, raw_latency = predict(first, sim_tokenizer, sim_model)
+                combined_text = first + " " + second
+                combined_top, combined_rows, combined_tokens, combined_latency = predict(combined_text, sim_tokenizer, sim_model)
+                compare = pd.DataFrame([
+                    {"Input strategy": "Turn 1 only", "Text": first, "Predicted tag": raw_top["Language tag"],
+                     "Top score (%)": raw_top["Confidence (%)"], "Tokens": raw_tokens, "Inference ms": round(raw_latency, 2)},
+                    {"Input strategy": "Turn 1 + Turn 2", "Text": combined_text, "Predicted tag": combined_top["Language tag"],
+                     "Top score (%)": combined_top["Confidence (%)"], "Tokens": combined_tokens, "Inference ms": round(combined_latency, 2)},
+                ])
+                st.dataframe(compare, hide_index=True, use_container_width=True)
+                st.caption("A higher score does not prove a prediction is more correct without ground-truth labels.")
+            st.subheader("5. Script cues (observable, not model explanation)")
+            st.json(f1["script_cues"] if f1["script_cues"] else {"message": "No recognized script cues found."})
+        except Exception as exc:
+            st.error("Could not run the turn-flow simulation.")
+            st.code(str(exc))
+            st.info("Check that the selected model ZIP is downloadable and contains config.json, tokenizer files, and model weights.")
+
 text_input = st.text_area(
     "Sentence to classify",
     value="Eligibility क्या है?",
