@@ -10,9 +10,9 @@ import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 ROOT = Path(__file__).resolve().parent
-OLD_MODEL_ARCHIVE = EXTRACT_ROOT / "downloads" / "model_4_3.zip"
-ARTIFACT_DIR = ROOT / "artifacts" / "models"
 EXTRACT_ROOT = Path(tempfile.gettempdir()) / "multilingual-voice-language-classifier-models"
+OLD_MODEL_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4.3.zip"
+ARTIFACT_DIR = ROOT / "artifacts" / "models"
 MAX_LENGTH = 128
 
 # Version 4 and Version 4.1 models are stored on their respective branches.
@@ -30,11 +30,17 @@ VERSION41_MODEL_URL = (
 )
 VERSION41_CACHE_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4.1.zip"
 
+VERSION43_MODEL_URL = (
+    "https://media.githubusercontent.com/media/abhinavnautiyalDS/"
+    "Real-Time-Language-Switching-for-Voice-Agents/version4.1/"
+    "models/bert_tiny_e2_multilingual_version4.3.zip"
+)
+
 MODEL_OPTIONS = {
     "4.3 — latest multilingual model": {
         "kind": "remote_zip",
         "path": OLD_MODEL_ARCHIVE,
-        "url": "https://media.githubusercontent.com/media/abhinavnautiyalDS/Real-Time-Language-Switching-for-Voice-Agents/version4.1/models/bert_tiny_e2_multilingual_version4.1.zip",
+        "url": VERSION43_MODEL_URL,
         "extract_name": "model_4_3",
         "description": "Latest multilingual BERT-Tiny E2 checkpoint from the version4.1 branch.",
     },
@@ -110,7 +116,7 @@ def resolve_model_dir(model_name: str) -> Path:
             urllib.request.urlretrieve(spec["url"], archive)
         except Exception as exc:
             raise RuntimeError(
-                f"Could not download the Version 4 model from {spec['url']}: {exc}"
+                f"Could not download the selected model from {spec['url']}: {exc}"
             ) from exc
 
     if not archive.exists():
