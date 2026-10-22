@@ -1,0 +1,48 @@
+{
+  "checkpoint": "google/bert_uncased_L-2_H-128_A-2",
+  "architecture": "BERT-Tiny E2",
+  "labels": [
+    "as-IN",
+    "bn-IN",
+    "en-IN",
+    "gu-IN",
+    "hi-IN",
+    "kn-IN",
+    "ml-IN",
+    "mr-IN",
+    "pa-IN",
+    "ta-IN",
+    "te-IN",
+    "none"
+  ],
+  "accuracy": 0.9992120849861436,
+  "macro_f1": 0.9992916454207944,
+  "test_loss": 0.004617618907177072,
+  "embedding_transfer_coverage": 0.16935325339099666,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.16239955407096837,
+      "validation_loss": 0.010586521839318068,
+      "validation_accuracy": 0.9976763462923456,
+      "validation_macro_f1": 0.9977589203064602,
+      "seconds": 255.3
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.0016376064788618922,
+      "validation_loss": 0.006790233225278232,
+      "validation_accuracy": 0.9983693658191899,
+      "validation_macro_f1": 0.9984227478358246,
+      "seconds": 233.6
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.0002572578561185886,
+      "validation_loss": 0.004057971857002248,
+      "validation_accuracy": 0.9993341577095025,
+      "validation_macro_f1": 0.9993792412950966,
+      "seconds": 219.4
+    }
+  ]
+}
