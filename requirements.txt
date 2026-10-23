@@ -7,3 +7,4 @@ datasets>=3.0
 evaluate>=0.4
 accelerate>=1.0
 safetensors>=0.4
+matplotlib>=3.8
