@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent
 EXTRACT_ROOT = Path(tempfile.gettempdir()) / "multilingual-voice-language-classifier-models"
 OLD_MODEL_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4.3.zip"
 ARTIFACT_DIR = ROOT / "artifacts" / "models"
+VERSION44_ARCHIVE = ROOT / "artifacts" / "version_4_4" / "archives" / "bert_tiny_e2_multilingual4.4.zip"
 MAX_LENGTH = 128
 
 # Version 4 and Version 4.1 models are stored on their respective branches.
@@ -66,6 +67,12 @@ MODEL_OPTIONS = {
         "url": VERSION4_MODEL_URL,
         "extract_name": "bert_tiny_e2_multilingual_version4",
         "description": "Version 4 BERT-Tiny E2 model from the version4 branch.",
+    },
+    "4.4 — multilingual E2": {
+        "kind": "zip",
+        "path": VERSION44_ARCHIVE,
+        "extract_name": "bert_tiny_e2_multilingual_version4_4",
+        "description": "Version 4.4 multilingual BERT-Tiny E2 model archive.",
     },
 }
 
@@ -225,7 +232,7 @@ with st.sidebar:
         "Choose model",
         options=list(MODEL_OPTIONS.keys()),
         index=0,
-        help="Compare the latest 4.3 model, new E2, Version 4.1 ZIP, and Version 4 models.",
+        help="Compare 4.3, new E2, Version 4.1, Version 4, and Version 4.4 models.",
     )
     st.caption(MODEL_OPTIONS[selected_model]["description"])
     st.divider()
