@@ -5,6 +5,9 @@ import zipfile
 import urllib.request
 import urllib.error
 
+import matplotlib.pyplot as plt
+from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score, classification_report, confusion_matrix, precision_recall_fscore_support
+
 import pandas as pd
 import streamlit as st
 import torch
@@ -14,7 +17,12 @@ ROOT = Path(__file__).resolve().parent
 EXTRACT_ROOT = Path(tempfile.gettempdir()) / "multilingual-voice-language-classifier-models"
 OLD_MODEL_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual_version4.3.zip"
 ARTIFACT_DIR = ROOT / "artifacts" / "models"
-VERSION44_ARCHIVE = ROOT / "artifacts" / "version_4_4" / "archives" / "bert_tiny_e2_multilingual4.4.zip"
+VERSION44_ARCHIVE = EXTRACT_ROOT / "downloads" / "bert_tiny_e2_multilingual4.4.zip"
+VERSION44_MODEL_URL = (
+    "https://github.com/abhinavnautiyalDS/"
+    "Real-Time-Language-Switching-for-Voice-Agents/raw/refs/heads/realtime-v4.4/"
+    "artifacts/version_4_4/archives/bert_tiny_e2_multilingual4.4.zip"
+)
 MAX_LENGTH = 128
 
 # Version 4 and Version 4.1 models are stored on their respective branches.
@@ -69,10 +77,11 @@ MODEL_OPTIONS = {
         "description": "Version 4 BERT-Tiny E2 model from the version4 branch.",
     },
     "4.4 — multilingual E2": {
-        "kind": "zip",
+        "kind": "remote_zip",
         "path": VERSION44_ARCHIVE,
+        "url": VERSION44_MODEL_URL,
         "extract_name": "bert_tiny_e2_multilingual_version4_4",
-        "description": "Version 4.4 multilingual BERT-Tiny E2 model archive.",
+        "description": "Version 4.4 multilingual BERT-Tiny E2 model hosted on the realtime-v4.4 branch.",
     },
 }
 
@@ -548,6 +557,145 @@ if st.button("Classify sentence", type="primary"):
                 "For Version 4 and Version 4.1, check network access to the branch model ZIP. "
                 "Also check requirements.txt dependencies."
             )
+
+
+# Evaluation lab: compare all configured models against one labelled sheet.
+st.divider()
+st.header("📊 Evaluation Lab — compare models on the same evaluation sheet")
+st.write(
+    "Upload a CSV or Excel file with ground-truth columns named `text` and `label`. "
+    "Every selected model predicts the same rows; the UI compares those predictions with the labels."
+)
+with st.expander("Evaluation file requirements", expanded=False):
+    st.markdown(
+        "- Required columns: `text` and `label` (labels must match model output tags, e.g. `hi-IN`).\n"
+        "- Extra columns such as `case_id`, `language`, `source_type`, and `has_number` are retained in downloads.\n"
+        "- Metrics include accuracy, macro/weighted F1, per-class precision/recall/F1 and confusion matrices.\n"
+        "- Batch latency is throughput-normalized ms/row, not true single-request p50/p90."
+    )
+
+eval_upload = st.file_uploader("Upload evaluation sheet (.csv, .xlsx, .xls)", type=["csv", "xlsx", "xls"], key="model_eval_upload")
+eval_models = st.multiselect("Models to compare", options=list(MODEL_OPTIONS.keys()), default=list(MODEL_OPTIONS.keys()), key="model_eval_select")
+
+def _read_evaluation_sheet(upload):
+    frame = pd.read_csv(upload) if upload.name.lower().endswith(".csv") else pd.read_excel(upload)
+    frame.columns = [str(col).strip() for col in frame.columns]
+    if "text" not in frame.columns or "label" not in frame.columns:
+        raise ValueError("Evaluation sheet must include columns named exactly 'text' and 'label'.")
+    frame = frame.dropna(subset=["text", "label"]).copy()
+    frame["text"] = frame["text"].astype(str).str.strip()
+    frame["label"] = frame["label"].astype(str).str.strip()
+    frame = frame[(frame["text"] != "") & (frame["label"] != "")].reset_index(drop=True)
+    if frame.empty:
+        raise ValueError("No non-empty text/label rows were found.")
+    return frame
+
+def _evaluate_one_model(model_name, frame):
+    model_dir = resolve_model_dir(model_name)
+    tokenizer, model = load_classifier(str(model_dir))
+    texts = frame["text"].tolist()
+    predictions, confidences, batch_ms_each = [], [], []
+    batch_size = 64
+    progress = st.progress(0.0, text=f"Evaluating {model_name}...")
+    for start in range(0, len(texts), batch_size):
+        batch = texts[start:start + batch_size]
+        encoded = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=MAX_LENGTH)
+        t0 = time.perf_counter()
+        with torch.inference_mode():
+            probs = torch.softmax(model(**encoded).logits, dim=-1).cpu().numpy()
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        id2label = model.config.id2label or {}
+        for row, prob in enumerate(probs):
+            idx = int(prob.argmax())
+            predictions.append(str(id2label.get(idx, id2label.get(str(idx), f"class-{idx}"))))
+            confidences.append(float(prob[idx]))
+            batch_ms_each.append(elapsed_ms / max(len(batch), 1))
+        progress.progress(min(1.0, (start + len(batch)) / max(len(texts), 1)))
+    progress.empty()
+    truth = frame["label"].astype(str).tolist()
+    labels = sorted(set(truth) | set(predictions))
+    macro_p, macro_r, macro_f1, _ = precision_recall_fscore_support(truth, predictions, labels=labels, average="macro", zero_division=0)
+    _, _, weighted_f1, _ = precision_recall_fscore_support(truth, predictions, labels=labels, average="weighted", zero_division=0)
+    return {
+        "model": model_name, "predictions": predictions, "confidence": confidences, "labels": labels,
+        "accuracy": accuracy_score(truth, predictions), "macro_precision": macro_p,
+        "macro_recall": macro_r, "macro_f1": macro_f1, "weighted_f1": weighted_f1,
+        "p50_batch_ms_row": float(pd.Series(batch_ms_each).quantile(.50)),
+        "p90_batch_ms_row": float(pd.Series(batch_ms_each).quantile(.90)),
+        "report": classification_report(truth, predictions, labels=labels, output_dict=True, zero_division=0),
+        "matrix": confusion_matrix(truth, predictions, labels=labels),
+    }
+
+if eval_upload is not None:
+    try:
+        evaluation_df = _read_evaluation_sheet(eval_upload)
+        st.success(f"Loaded {len(evaluation_df):,} labelled examples.")
+        st.dataframe(evaluation_df.head(10), use_container_width=True)
+        if len(evaluation_df) > 50000:
+            st.warning("This is a large evaluation file. Running every model on CPU may take a while.")
+        if st.button("Run evaluation for selected models", type="primary", key="run_all_model_eval"):
+            if not eval_models:
+                st.error("Select at least one model.")
+            else:
+                completed, failed = [], []
+                for model_name in eval_models:
+                    st.markdown(f"#### {model_name}")
+                    try:
+                        with st.spinner(f"Loading and evaluating {model_name}..."):
+                            result = _evaluate_one_model(model_name, evaluation_df)
+                        completed.append(result)
+                        st.success(f"{model_name}: evaluation completed.")
+                    except Exception as exc:
+                        failed.append({"Model": model_name, "Error": str(exc)})
+                        st.error(f"{model_name} failed: {exc}")
+                if completed:
+                    summary = pd.DataFrame([{
+                        "Model": x["model"], "Accuracy": x["accuracy"],
+                        "Macro precision": x["macro_precision"], "Macro recall": x["macro_recall"],
+                        "Macro F1": x["macro_f1"], "Weighted F1": x["weighted_f1"],
+                        "P50 batch ms/row": x["p50_batch_ms_row"],
+                        "P90 batch ms/row": x["p90_batch_ms_row"], "Examples": len(evaluation_df),
+                    } for x in completed]).sort_values("Macro F1", ascending=False)
+                    st.subheader("🏆 Leaderboard")
+                    st.dataframe(summary.style.format({
+                        "Accuracy": "{:.4f}", "Macro precision": "{:.4f}", "Macro recall": "{:.4f}",
+                        "Macro F1": "{:.4f}", "Weighted F1": "{:.4f}",
+                        "P50 batch ms/row": "{:.3f}", "P90 batch ms/row": "{:.3f}",
+                    }), hide_index=True, use_container_width=True)
+                    st.subheader("Model metric comparison")
+                    st.bar_chart(summary.set_index("Model")[["Accuracy", "Macro F1", "Weighted F1"]])
+                    best = summary.iloc[0]
+                    st.success(f"Best by macro-F1 on this evaluation sheet: {best['Model']} (macro-F1 = {best['Macro F1']:.4f}).")
+                    st.caption("This winner applies to this evaluation set only; check class-level recall and confusion matrices before deciding.")
+                    for result in completed:
+                        with st.expander(f"{result['model']} — per-class metrics and confusion matrix"):
+                            report_df = pd.DataFrame(result["report"]).T.reset_index().rename(columns={"index": "Class"})
+                            st.dataframe(report_df, use_container_width=True)
+                            fig, ax = plt.subplots(figsize=(10, 8))
+                            ConfusionMatrixDisplay(confusion_matrix=result["matrix"], display_labels=result["labels"]).plot(
+                                ax=ax, xticks_rotation=45, values_format="d", colorbar=False
+                            )
+                            ax.set_title(f"{result['model']} confusion matrix")
+                            fig.tight_layout()
+                            st.pyplot(fig)
+                            plt.close(fig)
+                    combined = evaluation_df.copy()
+                    for result in completed:
+                        key = result["model"].lower().replace(" ", "_").replace(".", "_")
+                        combined[f"prediction_{key}"] = result["predictions"]
+                        combined[f"confidence_{key}"] = result["confidence"]
+                    st.download_button(
+                        "Download combined predictions for all models",
+                        combined.to_csv(index=False).encode("utf-8-sig"),
+                        file_name="model_evaluation_all_predictions.csv",
+                        mime="text/csv", key="download_combined_eval",
+                    )
+                if failed:
+                    st.subheader("Models that could not be evaluated")
+                    st.dataframe(pd.DataFrame(failed), hide_index=True, use_container_width=True)
+    except Exception as exc:
+        st.error(f"Could not read the evaluation sheet: {exc}")
+
 
 st.divider()
 st.caption(
