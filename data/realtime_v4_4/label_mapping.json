@@ -1,0 +1,14 @@
+{
+  "as-IN": "Assamese",
+  "bn-IN": "Bengali",
+  "en-IN": "English",
+  "gu-IN": "Gujarati",
+  "hi-IN": "Hindi (including supported Hindi-English Hinglish)",
+  "kn-IN": "Kannada",
+  "ml-IN": "Malayalam",
+  "mr-IN": "Marathi",
+  "none": "Unsupported language or combination outside the supported-label policy",
+  "pa-IN": "Punjabi (including supported Punjabi-Hindi/English combinations)",
+  "ta-IN": "Tamil",
+  "te-IN": "Telugu"
+}
