@@ -4,6 +4,7 @@ import time
 import zipfile
 import urllib.request
 import urllib.error
+import os
 
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score, classification_report, confusion_matrix, precision_recall_fscore_support
@@ -28,8 +29,8 @@ VERSION44_MODEL_URL = (
 # bert-tiny-indic-lid repository. Download individual artifacts on first use.
 E4_MODEL_DIR = EXTRACT_ROOT / "bert_tiny_indic_lid_e4"
 E4_MODEL_BASE_URL = (
-    "https://raw.githubusercontent.com/abhinavnautiyalDS/"
-    "bert-tiny-indic-lid/main/model/bert-tiny-e4/"
+    "https://api.github.com/repos/abhinavnautiyalDS/"
+    "bert-tiny-indic-lid/contents/model/bert-tiny-e4/"
 )
 E4_MODEL_FILES = (
     "config.json",
@@ -173,14 +174,27 @@ def resolve_model_dir(model_name: str) -> Path:
                 destination = model_dir / filename
                 if destination.exists() and destination.stat().st_size > 0:
                     continue
-                url = E4_MODEL_BASE_URL + filename
+                url = E4_MODEL_BASE_URL + filename + "?ref=main"
+                request = urllib.request.Request(
+                    url,
+                    headers={
+                        "Accept": "application/vnd.github.raw+json",
+                        **(
+                            {"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}"}
+                            if os.environ.get("GITHUB_TOKEN")
+                            else {}
+                        ),
+                    },
+                )
                 try:
-                    urllib.request.urlretrieve(url, destination)
+                    with urllib.request.urlopen(request, timeout=60) as response:
+                        destination.write_bytes(response.read())
                 except Exception as exc:
                     destination.unlink(missing_ok=True)
                     raise RuntimeError(
-                        f"Could not download BERT-Tiny E4 file '{filename}' from {url}. "
-                        "Confirm the source repository is accessible and the model artifact exists."
+                        f"Could not download BERT-Tiny E4 file '{filename}' from the GitHub Contents API. "
+                        "If bert-tiny-indic-lid is private, configure GITHUB_TOKEN in the deployment "
+                        "environment with read access to that repository. Do not hard-code the token."
                     ) from exc
             # Validate essential artifacts before attempting Transformers loading.
             if not config_path.exists() or not weights_path.exists():
