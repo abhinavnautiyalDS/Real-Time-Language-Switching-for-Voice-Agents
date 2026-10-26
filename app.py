@@ -23,7 +23,21 @@ VERSION44_MODEL_URL = (
     "Real-Time-Language-Switching-for-Voice-Agents/raw/refs/heads/realtime-v4.4/"
     "artifacts/version_4_4/archives/bert_tiny_e2_multilingual4.4.zip"
 )
-MAX_LENGTH = 128
+
+# BERT-Tiny E4 checkpoint and its matching tokenizer live in the private
+# bert-tiny-indic-lid repository. Download individual artifacts on first use.
+E4_MODEL_DIR = EXTRACT_ROOT / "bert_tiny_indic_lid_e4"
+E4_MODEL_BASE_URL = (
+    "https://raw.githubusercontent.com/abhinavnautiyalDS/"
+    "bert-tiny-indic-lid/main/model/bert-tiny-e4/"
+)
+E4_MODEL_FILES = (
+    "config.json",
+    "model.safetensors",
+    "tokenizer.json",
+    "tokenizer_config.json",
+)
+MAX_LENGTH = 192
 
 # Version 4 and Version 4.1 models are stored on their respective branches.
 VERSION4_MODEL_URL = (
@@ -82,6 +96,11 @@ MODEL_OPTIONS = {
         "url": VERSION44_MODEL_URL,
         "extract_name": "bert_tiny_e2_multilingual_version4_4",
         "description": "Version 4.4 multilingual BERT-Tiny E2 model hosted on the realtime-v4.4 branch.",
+    },
+    "BERT-Tiny E4 — Indic LID": {
+        "kind": "remote_model",
+        "path": E4_MODEL_DIR,
+        "description": "Four-layer, 12-class Indic language identifier with its matching 50k WordPiece tokenizer (from bert-tiny-indic-lid/model/bert-tiny-e4).",
     },
 }
 
@@ -143,6 +162,32 @@ def resolve_model_dir(model_name: str) -> Path:
     spec = MODEL_OPTIONS[model_name]
     if spec["kind"] == "directory":
         return Path(spec["path"])
+
+    if spec["kind"] == "remote_model":
+        model_dir = Path(spec["path"])
+        config_path = model_dir / "config.json"
+        weights_path = model_dir / "model.safetensors"
+        if not config_path.exists() or not weights_path.exists():
+            model_dir.mkdir(parents=True, exist_ok=True)
+            for filename in E4_MODEL_FILES:
+                destination = model_dir / filename
+                if destination.exists() and destination.stat().st_size > 0:
+                    continue
+                url = E4_MODEL_BASE_URL + filename
+                try:
+                    urllib.request.urlretrieve(url, destination)
+                except Exception as exc:
+                    destination.unlink(missing_ok=True)
+                    raise RuntimeError(
+                        f"Could not download BERT-Tiny E4 file '{filename}' from {url}. "
+                        "Confirm the source repository is accessible and the model artifact exists."
+                    ) from exc
+            # Validate essential artifacts before attempting Transformers loading.
+            if not config_path.exists() or not weights_path.exists():
+                raise FileNotFoundError(
+                    f"BERT-Tiny E4 artifacts are incomplete in {model_dir}."
+                )
+        return model_dir
 
     archive = Path(spec["path"])
     if spec["kind"] == "remote_zip" and not archive.exists():
@@ -241,12 +286,14 @@ with st.sidebar:
         "Choose model",
         options=list(MODEL_OPTIONS.keys()),
         index=0,
-        help="Compare 4.3, new E2, Version 4.1, Version 4, and Version 4.4 models.",
+        help="Compare the existing E2 versions with the new BERT-Tiny E4 Indic language identification model.",
     )
     st.caption(MODEL_OPTIONS[selected_model]["description"])
     st.divider()
     st.header("Model details")
     st.write("**Classes:** 12 language tags")
+    if selected_model == "BERT-Tiny E4 — Indic LID":
+        st.caption("Checkpoint: bert-tiny-indic-lid/model/bert-tiny-e4 · max input length: 192 tokens")
     st.write("**Device:** CPU")
     st.warning(
         "Softmax confidence is not a guarantee of correctness or a calibrated probability. "
